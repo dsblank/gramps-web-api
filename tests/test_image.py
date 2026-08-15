@@ -22,9 +22,10 @@
 import io
 import os
 import pytest
+from flask import Flask
 from gramps_webapi.app import create_app
-from gramps_webapi.api.image import ThumbnailHandler
-from gramps_webapi.const import MIME_PDF
+from gramps_webapi.api.image import ThumbnailHandler, negotiate_thumbnail_format
+from gramps_webapi.const import MIME_AVIF, MIME_JPEG, MIME_PDF
 from PIL import Image
 from werkzeug.exceptions import HTTPException
 
@@ -71,6 +72,36 @@ def test_pdf_render_size_capped():
     handler = ThumbnailHandler(buf, MIME_PDF)
     img = handler.get_image()
     assert img.width <= 2000 and img.height <= 2000
+
+
+_negotiate_app = Flask(__name__)
+
+
+@pytest.mark.parametrize(
+    "accept_header,expected",
+    [
+        (None, (  # no Accept header at all
+            "JPEG",
+            MIME_JPEG,
+        )),
+        ("*/*", ("JPEG", MIME_JPEG)),  # curl's default
+        # "image/*" without an exact "image/avif" entry: best_match() would
+        # wrongly treat this as AVIF-capable -- the whole reason for the
+        # exact-match check instead.
+        ("image/*,*/*;q=0.8", ("JPEG", MIME_JPEG)),
+        (
+            "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",  # Chromium
+            ("AVIF", MIME_AVIF),
+        ),
+        ("Image/AVIF", ("AVIF", MIME_AVIF)),  # case-insensitive
+        ("image/avif;q=0.5", ("AVIF", MIME_AVIF)),  # quality param doesn't matter
+    ],
+)
+def test_negotiate_thumbnail_format(accept_header, expected):
+    """negotiate_thumbnail_format must require an exact image/avif entry."""
+    headers = {"Accept": accept_header} if accept_header is not None else {}
+    with _negotiate_app.test_request_context("/", headers=headers):
+        assert negotiate_thumbnail_format() == expected
 
 
 def test_unsupported_mime_type_aborts_415():

@@ -76,6 +76,7 @@ class TestThumbnail(unittest.TestCase):
                 self, "{}{}/thumbnail/20".format(TEST_URL, obj["handle"]), full=True
             )
             assert rv.mimetype == MIME_JPEG
+            assert rv.headers.get("Vary") == "Accept"
             img = Image.open(BytesIO(rv.data))
             assert img.format == "JPEG"
             # long side should be 20 px
@@ -92,10 +93,36 @@ class TestThumbnail(unittest.TestCase):
             )
             assert rv.status_code == 200
             assert rv.mimetype == MIME_AVIF
+            assert rv.headers.get("Vary") == "Accept"
             img = Image.open(BytesIO(rv.data))
             assert img.format == "AVIF"
             # long side should be 20 px
             assert max(img.width, img.height) == 20
+
+    def test_get_thumbnail_format_not_cross_cached(self):
+        """A cached JPEG for one client must not leak to a client asking for AVIF.
+
+        Regression test for the thumbnail cache key: it used to hardcode
+        ":avif" so an AVIF-capable and AVIF-incapable client requesting the
+        same thumbnail URL would collide on the same cached response.
+        """
+        media_objects = check_success(self, TEST_URL)
+        obj = media_objects[0]
+        url = "{}{}/thumbnail/20".format(TEST_URL, obj["handle"])
+
+        header = fetch_header(self.client)
+        rv_default = self.client.get(url, headers=header)
+        assert rv_default.mimetype == MIME_JPEG
+
+        header_avif = dict(header)
+        header_avif["Accept"] = MIME_AVIF
+        rv_avif = self.client.get(url, headers=header_avif)
+        assert rv_avif.mimetype == MIME_AVIF
+
+        # repeat the plain request: must still be JPEG, not the cached AVIF response
+        rv_default_again = self.client.get(url, headers=header)
+        assert rv_default_again.mimetype == MIME_JPEG
+        assert rv_default_again.data == rv_default.data
 
     def test_get_thumbnail_square(self):
         """Test reponse for square thumbnails."""
@@ -194,6 +221,7 @@ class TestCropped(unittest.TestCase):
                 full=True,
             )
             assert rv.mimetype == MIME_JPEG
+            assert rv.headers.get("Vary") == "Accept"
             img = Image.open(BytesIO(rv.data))
             assert img.format == "JPEG"
             # allow 1 px difference due to rounding
@@ -216,6 +244,7 @@ class TestCropped(unittest.TestCase):
             )
             assert rv.status_code == 200
             assert rv.mimetype == MIME_AVIF
+            assert rv.headers.get("Vary") == "Accept"
             img = Image.open(BytesIO(rv.data))
             assert img.format == "AVIF"
             # allow 1 px difference due to rounding
@@ -265,6 +294,7 @@ class TestCroppedThumbnail(unittest.TestCase):
                 full=True,
             )
             assert rv.mimetype == MIME_JPEG
+            assert rv.headers.get("Vary") == "Accept"
             img = Image.open(BytesIO(rv.data))
             assert img.format == "JPEG"
             # long side should be 20 px
@@ -282,6 +312,7 @@ class TestCroppedThumbnail(unittest.TestCase):
             )
             assert rv.status_code == 200
             assert rv.mimetype == MIME_AVIF
+            assert rv.headers.get("Vary") == "Accept"
             img = Image.open(BytesIO(rv.data))
             assert img.format == "AVIF"
             # long side should be 20 px
