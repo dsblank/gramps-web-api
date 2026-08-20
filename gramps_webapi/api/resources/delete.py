@@ -40,7 +40,7 @@ from gramps.gen.utils.db import (
 
 from ...const import GRAMPS_OBJECT_PLURAL
 from ..search import get_search_indexer, get_semantic_search_indexer
-from .util import app_has_semantic_search, transaction_to_json
+from .util import app_has_search_index, app_has_semantic_search, transaction_to_json
 
 
 def delete_person(db_handle: DbWriteBase, handle: str, trans: DbTxn) -> None:
@@ -591,6 +591,8 @@ def remove_deleted_from_search_indices(
     (re-)indexing in the background, since that requires (re-)computing
     embeddings for semantic search.
     """
+    if not app_has_search_index():
+        return []
     indexer = get_search_indexer(tree)
     indexer_semantic = (
         get_semantic_search_indexer(tree) if app_has_semantic_search() else None

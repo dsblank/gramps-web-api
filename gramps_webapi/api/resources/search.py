@@ -62,6 +62,7 @@ from .emit import GrampsJSONEncoder
 from .schemas import SearchResultSchema
 from .util import (
     abort_with_message,
+    app_has_search_index,
     get_citation_profile_for_object,
     get_event_profile_for_object,
     get_family_profile_for_object,
@@ -213,6 +214,8 @@ class SearchResource(GrampsJSONEncoder, ProtectedResource):
     @api_blueprint.arguments(SearchQueryArgs, location="query")
     def get(self, args: Dict):
         """Get search result."""
+        if not app_has_search_index():
+            abort_with_message(503, "Search index is disabled")
         tree = get_tree_from_jwt_or_fail()
         try:
             if args["semantic"]:
@@ -290,6 +293,8 @@ class SearchIndexResource(ProtectedResource):
     def post(self, args: Dict):
         """Trigger a reindex."""
         require_permissions([PERM_TRIGGER_REINDEX])
+        if not app_has_search_index():
+            abort_with_message(503, "Search index is disabled")
         tree = get_tree_from_jwt_or_fail()
         user_id = get_jwt_identity()
         if args["full"]:

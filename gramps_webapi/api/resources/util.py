@@ -1867,6 +1867,11 @@ def app_has_semantic_search() -> bool:
     return bool(current_app.config.get("VECTOR_EMBEDDING_MODEL"))
 
 
+def app_has_search_index() -> bool:
+    """Indicate whether the full-text/semantic search index is enabled."""
+    return bool(current_app.config.get("SEARCH_INDEX_ENABLED", True))
+
+
 def normalize_etag(etag: str | None) -> str | None:
     """Normalize an Etag"""
     if not etag:

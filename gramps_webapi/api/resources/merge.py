@@ -46,13 +46,15 @@ from ..tasks import run_task, update_search_indices_from_transaction
 from ..util import get_db_handle, get_tree_from_jwt_or_fail
 from . import ProtectedResource
 from .emit import GrampsJSONEncoder
-from .util import abort_with_message, app_has_semantic_search
+from .util import abort_with_message, app_has_search_index, app_has_semantic_search
 
 
 def _update_search_index(
     titanic_handle: str, phoenix_handle: str, class_name: str
 ) -> None:
     """Remove titanic from index and schedule re-indexing of phoenix."""
+    if not app_has_search_index():
+        return
     tree = get_tree_from_jwt_or_fail()
     indexer: SearchIndexer = get_search_indexer(tree)
     indexer.delete_object(handle=titanic_handle, class_name=class_name)

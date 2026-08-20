@@ -29,7 +29,7 @@ from typing import Any
 from pydantic_ai import RunContext
 
 from ..resources.filters import apply_filter
-from ..resources.util import get_one_relationship
+from ..resources.util import app_has_search_index, get_one_relationship
 from ..search import get_search_indexer, get_semantic_search_indexer
 from ..search.indexer import SearchIndexerBase
 from ..search.text import obj_strings_from_object
@@ -342,6 +342,9 @@ def search_genealogy_database(
     Returns:
         Formatted genealogical data matching the query.
     """
+    if not app_has_search_index():
+        return "The search index is disabled on this server."
+
     if ctx.deps.progress_callback:
         ctx.deps.progress_callback(
             "search_genealogy_database", "Searching genealogy database..."

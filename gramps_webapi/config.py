@@ -41,6 +41,11 @@ class DefaultConfig(object):
     OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
     SEARCH_INDEX_DIR = "indexdir"  # deprecated!
     SEARCH_INDEX_DB_URI = ""
+    # When False, the full-text/semantic search index is never created,
+    # queried, or updated -- object writes skip indexing entirely and
+    # /api/search/ reports the feature as disabled instead of returning
+    # results from a stale or empty index.
+    SEARCH_INDEX_ENABLED = True
     # verify pooled connections on checkout, as idle ones can be dropped server-side
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
     EMAIL_HOST = "localhost"

@@ -60,6 +60,7 @@ from .resources.restore import (
 )
 from .resources.util import (
     abort_with_message,
+    app_has_search_index,
     app_has_semantic_search,
     dry_run_import,
     run_import,
@@ -205,6 +206,8 @@ def _search_reindex_full(
     tree: str, user_id: str, semantic: bool, progress_cb: Optional[Callable] = None
 ) -> None:
     """Rebuild the search index."""
+    if not app_has_search_index():
+        return
     if semantic:
         indexer: SearchIndexer | SemanticSearchIndexer = get_semantic_search_indexer(
             tree, skip_model_check=True
@@ -284,6 +287,8 @@ def _search_reindex_incremental(
     tree: str, user_id: str, semantic: bool, progress_cb: Optional[Callable] = None
 ) -> None:
     """Run an incremental reindex of the search index."""
+    if not app_has_search_index():
+        return
     if semantic:
         indexer: SearchIndexer | SemanticSearchIndexer = get_semantic_search_indexer(
             tree
@@ -737,24 +742,29 @@ def process_transactions(
         if num_people_new:
             update_usage_people(tree=tree, user_id=user_id)
         # update search index
-        indexer: SearchIndexer = get_search_indexer(tree)
-        for _trans_dict in trans_dict:
-            handle = _trans_dict["handle"]
-            class_name = _trans_dict["_class"]
-            if _trans_dict["type"] == "delete":
-                indexer.delete_object(handle, class_name)
-            else:
-                indexer.add_or_update_object(handle, db_handle, class_name)
-        # update semantic search index
-        if app_has_semantic_search():
-            semantic_indexer: SemanticSearchIndexer = get_semantic_search_indexer(tree)
+        if app_has_search_index():
+            indexer: SearchIndexer = get_search_indexer(tree)
             for _trans_dict in trans_dict:
                 handle = _trans_dict["handle"]
                 class_name = _trans_dict["_class"]
                 if _trans_dict["type"] == "delete":
-                    semantic_indexer.delete_object(handle, class_name)
+                    indexer.delete_object(handle, class_name)
                 else:
-                    semantic_indexer.add_or_update_object(handle, db_handle, class_name)
+                    indexer.add_or_update_object(handle, db_handle, class_name)
+            # update semantic search index
+            if app_has_semantic_search():
+                semantic_indexer: SemanticSearchIndexer = get_semantic_search_indexer(
+                    tree
+                )
+                for _trans_dict in trans_dict:
+                    handle = _trans_dict["handle"]
+                    class_name = _trans_dict["_class"]
+                    if _trans_dict["type"] == "delete":
+                        semantic_indexer.delete_object(handle, class_name)
+                    else:
+                        semantic_indexer.add_or_update_object(
+                            handle, db_handle, class_name
+                        )
     finally:
         close_db(db_handle)
     return trans_dict
@@ -800,6 +810,8 @@ def update_search_indices_from_transaction(
     self, trans_dict: list[dict], tree: str, user_id: str
 ) -> None:
     """Update the search indices from a transaction."""
+    if not app_has_search_index():
+        return
     db_handle = get_db_outside_request(
         tree=tree, view_private=True, readonly=True, user_id=user_id
     )

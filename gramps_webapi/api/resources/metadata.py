@@ -25,7 +25,6 @@ from importlib import metadata
 
 import gramps_ql as gql
 import object_ql as oql
-import sifts
 from flask import Response, current_app
 from gramps.gen.const import ENV, GRAMPS_LOCALE
 from gramps.gen.db.base import DbReadBase
@@ -48,6 +47,7 @@ from ..util import get_db_handle, get_tree_from_jwt_or_fail
 from . import ProtectedResource
 from .emit import GrampsJSONEncoder
 from .schemas import MetadataSchema, ResearcherSchema
+from .util import app_has_search_index
 
 
 @functools.cache
@@ -149,33 +149,38 @@ class MetadataResource(ProtectedResource, GrampsJSONEncoder):
         has_chat = has_semantic_search and bool(current_app.config["LLM_MODEL"])
 
         has_ocr, ocr_languages = _get_ocr_info()
-        searcher = get_search_indexer(tree_id)
-        search_count = searcher.count(
-            include_private=has_permissions({PERM_VIEW_PRIVATE})
-        )
-        sifts_info = {
-            "version": sifts.__version__,
-            "count": search_count,
-        }
-        if current_app.config.get("VECTOR_EMBEDDING_MODEL"):
-            configured_model = current_app.config["VECTOR_EMBEDDING_MODEL"]
-            try:
-                db_url = _get_search_index_db_url()
-                stored_model = get_stored_model_name(db_url, tree_id)
-                stale = stored_model is not None and stored_model != configured_model
-            except (ValueError, OSError):
-                stale = False
-            sifts_info["semantic_index_stale"] = stale
-            if not stale:
+        if not app_has_search_index():
+            sifts_info = {"enabled": False}
+        else:
+            import sifts  # lazy: pulls in numpy/psycopg2, only needed when enabled
+
+            searcher = get_search_indexer(tree_id)
+            search_count = searcher.count(
+                include_private=has_permissions({PERM_VIEW_PRIVATE})
+            )
+            sifts_info = {
+                "version": sifts.__version__,
+                "count": search_count,
+            }
+            if current_app.config.get("VECTOR_EMBEDDING_MODEL"):
+                configured_model = current_app.config["VECTOR_EMBEDDING_MODEL"]
                 try:
-                    searcher_s = get_semantic_search_indexer(tree_id)
-                    sifts_info["count_semantic"] = searcher_s.count(
-                        include_private=has_permissions({PERM_VIEW_PRIVATE})
-                    )
-                except ValueError:
+                    db_url = _get_search_index_db_url()
+                    stored_model = get_stored_model_name(db_url, tree_id)
+                    stale = stored_model is not None and stored_model != configured_model
+                except (ValueError, OSError):
+                    stale = False
+                sifts_info["semantic_index_stale"] = stale
+                if not stale:
+                    try:
+                        searcher_s = get_semantic_search_indexer(tree_id)
+                        sifts_info["count_semantic"] = searcher_s.count(
+                            include_private=has_permissions({PERM_VIEW_PRIVATE})
+                        )
+                    except ValueError:
+                        sifts_info["count_semantic"] = None
+                else:
                     sifts_info["count_semantic"] = None
-            else:
-                sifts_info["count_semantic"] = None
 
         result = {
             "database": {
