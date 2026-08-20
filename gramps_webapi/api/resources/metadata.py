@@ -22,6 +22,7 @@
 
 import functools
 from importlib import metadata
+from typing import Any, Dict
 
 import gramps_ql as gql
 import object_ql as oql
@@ -149,6 +150,7 @@ class MetadataResource(ProtectedResource, GrampsJSONEncoder):
         has_chat = has_semantic_search and bool(current_app.config["LLM_MODEL"])
 
         has_ocr, ocr_languages = _get_ocr_info()
+        sifts_info: Dict[str, Any]
         if not app_has_search_index():
             sifts_info = {"enabled": False}
         else:
