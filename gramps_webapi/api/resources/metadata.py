@@ -31,6 +31,7 @@ from gramps.gen.const import ENV, GRAMPS_LOCALE
 from gramps.gen.db.base import DbReadBase
 from gramps.gen.db.generic import DbGeneric
 from gramps.gen.db.utils import get_dbid_from_path
+from gramps.gen.errors import HandleError
 from gramps.gen.utils.grampslocale import INCOMPLETE_TRANSLATIONS
 from marshmallow import Schema, RAISE
 from webargs import fields
@@ -44,10 +45,10 @@ from ..blueprint import api_blueprint
 from ..search import get_search_indexer, get_semantic_search_indexer
 from ..search import _get_search_index_db_url
 from ..search.metadata import get_stored_model_name
-from ..util import get_db_handle, get_tree_from_jwt_or_fail
+from ..util import abort_with_message, get_db_handle, get_tree_from_jwt_or_fail
 from . import ProtectedResource
 from .emit import GrampsJSONEncoder
-from .schemas import MetadataSchema, ResearcherSchema
+from .schemas import DefaultPersonSchema, MetadataSchema, ResearcherSchema
 
 
 @functools.cache
@@ -97,6 +98,22 @@ class ResearcherUpdateSchema(Schema):
     postal = fields.Str(metadata={"description": "Postal code."})
     state = fields.Str(metadata={"description": "State."})
     street = fields.Str(metadata={"description": "Street address."})
+
+
+class DefaultPersonUpdateSchema(Schema):
+    """Request body schema for PUT /metadata/default-person/."""
+
+    class Meta:
+        unknown = RAISE
+
+    handle = fields.Str(
+        required=True,
+        allow_none=True,
+        metadata={
+            "description": "Handle of the person to set as default (home) person, "
+            "or null to unset it."
+        },
+    )
 
 
 def get_dbid_from_tree_id(tree_id: str) -> str:
@@ -289,3 +306,32 @@ class MetadataResearcherResource(ProtectedResource, GrampsJSONEncoder):
             researcher.set_street(args["street"])
         db_handle.set_researcher(researcher)
         return self.response(200, db_handle.get_researcher())
+
+
+class MetadataDefaultPersonResource(ProtectedResource, GrampsJSONEncoder):
+    """Default (home) person resource."""
+
+    @property
+    def db_handle(self) -> DbReadBase:
+        """Get the database instance."""
+        return get_db_handle()
+
+    @api_blueprint.response(200, DefaultPersonSchema())
+    def get(self) -> Response:
+        """Get the default (home) person."""
+        return self.response(200, {"handle": self.db_handle.get_default_handle()})
+
+    @api_blueprint.response(200, DefaultPersonSchema())
+    @api_blueprint.arguments(DefaultPersonUpdateSchema, location="json")
+    def put(self, args) -> Response:
+        """Set or clear the default (home) person."""
+        require_permissions([PERM_EDIT_TREE])
+        handle = args["handle"]
+        db_handle = get_db_handle(readonly=False)
+        if handle is not None:
+            try:
+                db_handle.get_person_from_handle(handle)
+            except HandleError:
+                abort_with_message(404, f"Person not found for handle {handle}")
+        db_handle.set_default_person_handle(handle)
+        return self.response(200, {"handle": db_handle.get_default_handle()})

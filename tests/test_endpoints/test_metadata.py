@@ -29,6 +29,7 @@ from .util import fetch_header
 
 TEST_URL = BASE_URL + "/metadata/"
 TEST_RESEARCHER_URL = BASE_URL + "/metadata/researcher/"
+TEST_DEFAULT_PERSON_URL = BASE_URL + "/metadata/default-person/"
 
 
 class TestMetadata(unittest.TestCase):
@@ -110,3 +111,91 @@ class TestMetadataResearcher(unittest.TestCase):
         self.assertEqual(rv2.status_code, 200)
         self.assertEqual(rv2.json["name"], "Jane Doe")
         self.assertEqual(rv2.json["email"], "jane@example.com")
+
+
+class TestMetadataDefaultPerson(unittest.TestCase):
+    """Test cases for the /api/metadata/default-person/ endpoint."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Test class setup."""
+        cls.client = get_test_client()
+        header = fetch_header(cls.client)
+        rv = cls.client.get(BASE_URL + "/people/", headers=header)
+        cls.person_handle = rv.json[0]["handle"]
+
+    def tearDown(self):
+        """Reset the default person after each test."""
+        header = fetch_header(self.client)
+        self.client.put(TEST_DEFAULT_PERSON_URL, json={"handle": None}, headers=header)
+
+    def test_get_default_person_requires_token(self):
+        """Test authorization required."""
+        check_requires_token(self, TEST_DEFAULT_PERSON_URL)
+
+    def test_get_default_person_conforms_to_schema(self):
+        """Test GET conforms to schema."""
+        check_conforms_to_openapi_schema(
+            self, TEST_DEFAULT_PERSON_URL, "DefaultPerson"
+        )
+
+    def test_put_default_person_requires_token(self):
+        """Test PUT requires authorization."""
+        rv = self.client.put(
+            TEST_DEFAULT_PERSON_URL, json={"handle": self.person_handle}
+        )
+        self.assertEqual(rv.status_code, 401)
+
+    def test_put_default_person_editor_forbidden(self):
+        """Test that editor role cannot set the default person."""
+        header = fetch_header(self.client, role=ROLE_EDITOR)
+        rv = self.client.put(
+            TEST_DEFAULT_PERSON_URL,
+            json={"handle": self.person_handle},
+            headers=header,
+        )
+        self.assertEqual(rv.status_code, 403)
+
+    def test_put_default_person_sets_and_returns(self):
+        """Test that owner can set the default person and it is returned."""
+        header = fetch_header(self.client)
+        rv = self.client.put(
+            TEST_DEFAULT_PERSON_URL,
+            json={"handle": self.person_handle},
+            headers=header,
+        )
+        self.assertEqual(rv.status_code, 200)
+        self.assertEqual(rv.json["handle"], self.person_handle)
+
+        # Verify GET returns the updated value
+        rv2 = self.client.get(TEST_DEFAULT_PERSON_URL, headers=header)
+        self.assertEqual(rv2.status_code, 200)
+        self.assertEqual(rv2.json["handle"], self.person_handle)
+
+        # Verify /api/metadata/ reflects it too
+        rv3 = self.client.get(TEST_URL, headers=header)
+        self.assertEqual(rv3.json["default_person"], self.person_handle)
+
+    def test_put_default_person_unknown_handle(self):
+        """Test that setting an unknown handle returns 404."""
+        header = fetch_header(self.client)
+        rv = self.client.put(
+            TEST_DEFAULT_PERSON_URL,
+            json={"handle": "does-not-exist"},
+            headers=header,
+        )
+        self.assertEqual(rv.status_code, 404)
+
+    def test_put_default_person_can_unset(self):
+        """Test that passing null clears the default person."""
+        header = fetch_header(self.client)
+        self.client.put(
+            TEST_DEFAULT_PERSON_URL,
+            json={"handle": self.person_handle},
+            headers=header,
+        )
+        rv = self.client.put(
+            TEST_DEFAULT_PERSON_URL, json={"handle": None}, headers=header
+        )
+        self.assertEqual(rv.status_code, 200)
+        self.assertIsNone(rv.json["handle"])

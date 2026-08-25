@@ -2007,6 +2007,15 @@ class ResearcherSchema(_Base):
     street = fields.Str(metadata={"description": "Street address."})
 
 
+class DefaultPersonSchema(_Base):
+    """The tree's default (home) person."""
+
+    handle = fields.Str(
+        allow_none=True,
+        metadata={"description": "Handle of the default (home) person, or null if unset."},
+    )
+
+
 class MetadataSchema(_Base):
     """Server and database metadata returned by /api/metadata/."""
 
